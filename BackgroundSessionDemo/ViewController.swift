@@ -24,10 +24,9 @@ class ViewController: UIViewController {
         return self.backgroundSession?.downloadTask(with: request)
         
     }()
-
+    
     override func viewDidLoad() {
         super.viewDidLoad()
-        downloadTask?.resume()
         // Do any additional setup after loading the view, typically from a nib.
     }
     
@@ -47,8 +46,71 @@ class ViewController: UIViewController {
         super.didReceiveMemoryWarning()
         // Dispose of any resources that can be recreated.
     }
+    
+    @IBAction func onClickDownload() {
+        downloadTask?.resume()
+
+    }
+    
+}
+
+// MARK: - <#Mark#>
+
+extension ViewController: URLSessionDownloadDelegate {
+    /*
+     Khi download Task hoàn thành một download, hàm dưới đây sẽ được gọi.
+     Và trong hàm này bạn cần phải copy hoặc move file ở vị trí Location tới một vị trí mới trước khi bị xoá khi hàm kết thúc.
+     URLSession:task:didCompleteWithError: will still be called.
+     */
+    
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        guard let originURL = downloadTask.originalRequest?.url else {
+            return
+        }
+        let destinationURL = AppDelegate.shared.documentsDirectoryURL.appendingPathComponent(originURL.lastPathComponent)
+        try? FileManager.default.removeItem(at: destinationURL)
+        try? FileManager.default.copyItem(at: location, to: destinationURL)
+
+        DispatchQueue.main.async(execute: {
+            self.imageView.image = UIImage(contentsOfFile: destinationURL.path)
+            self.isProgressViewHidden = true
+        })
+    }
+    
+    
+    // Gửi thông báo về quá trình download theo từng giai đoạn
+    
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+        /*
+         Báo cáo quá trình thực hiện của 1 task
+         nếu bạn đã tạo nhiều hơn 1 task, bạn phải giữ tham chiếu tới chúng và Báo cáo riêng từng cái
+         */
+        if downloadTask == self.downloadTask {
+            let progress : Float = Float(totalBytesWritten) / Float(totalBytesExpectedToWrite)
+            DispatchQueue.main.async(execute: {
+                self.progressView.progress = progress
+            })
+        }
+        
+    }
+}
 
 
+// MARK: - URLSessionTaskDelegate
+
+extension ViewController: URLSessionTaskDelegate {
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        if error == nil {
+            print("Task: \(task) completed successfully")
+        } else {
+            print("Task: \(task) completed with error: \(error!.localizedDescription)")
+        }
+        let progress = Float(task.countOfBytesReceived) / Float(task.countOfBytesExpectedToReceive)
+        DispatchQueue.main.async(execute: {
+            self.progressView.progress = progress
+        })
+        self.downloadTask = nil
+    }
 }
 
 // MARK: - URLSessionDelegate
@@ -62,6 +124,6 @@ extension ViewController: URLSessionDelegate {
         }
         print("All Tasks are finished")
     }
-
+    
 }
 
